@@ -1,56 +1,47 @@
 import numpy as np
 
-class KMeansCustom:
-    def __init__(self, n_clusters=3, max_iter=300, tol=1e-4, random_state=None):
+class CustomKMeans:
+    def __init__(self, n_clusters=2, max_iters=100, tol=1e-4, random_state=42):
         self.n_clusters = n_clusters
-        self.max_iter = max_iter
-        self.tol = tol
+        self.max_iters = max_iters
+        self.tol = tol  # Convergence threshold
         self.random_state = random_state
+        self.centroids = None
+
+    def initialize_centroids(self, X):
+        """Initialize centroids using K-Means++ initialization."""
+        np.random.seed(self.random_state)
+        centroids = [X[np.random.choice(X.shape[0])]]
+        
+        for _ in range(1, self.n_clusters):
+            distances = np.min([np.linalg.norm(X - c, axis=1) for c in centroids], axis=0)
+            probabilities = distances / distances.sum()
+            new_centroid = X[np.random.choice(X.shape[0], p=probabilities)]
+            centroids.append(new_centroid)
+        
+        return np.array(centroids)
 
     def fit(self, X):
-        np.random.seed(self.random_state)
+        """Run K-Means clustering on the dataset X."""
+        self.centroids = self.initialize_centroids(X)
 
-        # **Use K-Means++ initialization instead of random selection**
-        self.centroids = self._initialize_centroids_kmeans_plus_plus(X)
+        for _ in range(self.max_iters):
+            # Step 2: Assign each point to the closest centroid
+            distances = np.linalg.norm(X[:, np.newaxis] - self.centroids, axis=2)  # Compute distances
+            labels = np.argmin(distances, axis=1)  # Assign clusters
 
-        for _ in range(self.max_iter):
-            self.labels = self._assign_clusters(X)
+            # Step 3: Compute new centroids
+            new_centroids = np.array([X[labels == i].mean(axis=0) for i in range(self.n_clusters)])
 
-            new_centroids = np.array([X[np.where(self.labels == k)].mean(axis=0) for k in range(self.n_clusters)])
+            # Step 4: Check for convergence
+            if np.linalg.norm(self.centroids - new_centroids) < self.tol:
+                break  # Stop if centroids do not change significantly
 
+            self.centroids = new_centroids  # Update centroids
 
-            if np.all(np.abs(new_centroids - self.centroids) < self.tol):
-                break
-
-            self.centroids = new_centroids
+        return labels
 
     def predict(self, X):
-        return self._assign_clusters(X)
-
-    def _assign_clusters(self, X):
+        """Assign clusters based on the fitted centroids."""
         distances = np.linalg.norm(X[:, np.newaxis] - self.centroids, axis=2)
         return np.argmin(distances, axis=1)
-
-    def _initialize_centroids_kmeans_plus_plus(self, X):
-        """K-Means++ initialization for better centroid selection"""
-        n_samples, _ = X.shape
-        centroids = np.zeros((self.n_clusters, X.shape[1]))
-
-        # Pick first centroid randomly
-        centroids[0] = X[np.random.randint(n_samples)]
-
-        # Select remaining centroids
-        for i in range(1, self.n_clusters):
-            # Compute squared distances from the nearest centroid
-            distances = np.min([np.linalg.norm(X - centroid, axis=1)**2 for centroid in centroids[:i]], axis=0)
-
-            # Choose a new centroid with probability proportional to squared distance
-            probs = distances / np.sum(distances)
-            cumulative_probs = np.cumsum(probs)
-            r = np.random.rand()
-
-            # Pick the point corresponding to probability
-            new_centroid_index = np.where(cumulative_probs >= r)[0][0]
-            centroids[i] = X[new_centroid_index]
-
-        return centroids

@@ -17,6 +17,7 @@ class Tracker:
         self.tracker = sv.ByteTrack()
         self.optical_flow_tracker = {}  # Store previous player positions
         self.team_colors = {0: (0, 255, 0), 1: (0, 0, 255)} # Team 1: Green, Team 2: Red
+        self.ball_positions = [] 
     
     def add_position_to_tracks(sekf,tracks):
         for object, object_tracks in tracks.items():
@@ -210,9 +211,61 @@ class Tracker:
 
 
 
+    # def draw_annotations(self, video_frames, tracks, team_ball_control):
+    #     """Draw team-colored ellipses and track IDs on players."""
+    #     output_video_frames = []
+
+    #     for frame_num, frame in enumerate(video_frames):
+    #         frame = frame.copy()
+    #         player_dict = tracks["players"][frame_num]
+    #         ball_dict = tracks["ball"][frame_num]
+    #         referee_dict = tracks["referees"][frame_num]
+
+    #         for track_id, player in player_dict.items():
+    #             bbox = player["bbox"]
+    #             team = player.get("team", -1)
+    #             color = self.team_colors.get(team, (0, 0, 255))  # Default Red if missing
+
+    #             # Draw ellipse around player
+    #             frame = self.draw_ellipse(frame, bbox, color, track_id)
+    #             # Draw ball possession indicator (triangle)
+    #             if player.get("has_ball", False):
+    #                 frame = self.draw_traingle(frame, bbox, (0, 255, 0))  # Yellow for ball possession
+                
+    #         for _, referee in referee_dict.items():
+    #             frame = self.draw_ellipse(frame, referee["bbox"], (0, 255, 255))
+
+    #         for track_id, ball in ball_dict.items():
+    #             frame = self.draw_traingle(frame, ball["bbox"], (0, 255, 0))
+                
+    #         # ✅ Pass `team_colors` when calling `draw_team_ball_control()`
+    #         frame = self.draw_team_ball_control(frame, frame_num, team_ball_control, self.team_colors)
+
+    #         output_video_frames.append(frame)
+
+    #     return output_video_frames
+    
+    
+    # def draw_traingle(self,frame,bbox,color):
+    #     y= int(bbox[1])
+    #     x,_ = get_center_of_bbox(bbox)
+
+    #     triangle_points = np.array([
+    #         [x,y],
+    #         [x-10,y-20],
+    #         [x+10,y-20],
+    #     ])
+    #     cv2.drawContours(frame, [triangle_points],0,color, cv2.FILLED)
+    #     cv2.drawContours(frame, [triangle_points],0,(0,0,0), 2)
+        
+    #     return frame
+    
+    
+    
     def draw_annotations(self, video_frames, tracks, team_ball_control):
-        """Draw team-colored ellipses and track IDs on players."""
+        """Draw team-colored ellipses, track IDs on players, and visualize ball trajectory."""
         output_video_frames = []
+        self.ball_positions = []  # Store ball positions over frames
 
         for frame_num, frame in enumerate(video_frames):
             frame = frame.copy()
@@ -220,44 +273,55 @@ class Tracker:
             ball_dict = tracks["ball"][frame_num]
             referee_dict = tracks["referees"][frame_num]
 
+            # Track ball trajectory
+            if 1 in ball_dict:
+                bbox = ball_dict[1]["bbox"]
+                center_x, center_y = get_center_of_bbox(bbox)
+                self.ball_positions.append((center_x, center_y))
+
+            # Draw previous ball positions as a fading trajectory
+            for i, (x, y) in enumerate(self.ball_positions[-15:]):  # Keep last 15 positions
+                cv2.circle(frame, (int(x), int(y)), 3, (0, 165, 255), -1)  # Orange trail
+
             for track_id, player in player_dict.items():
                 bbox = player["bbox"]
                 team = player.get("team", -1)
                 color = self.team_colors.get(team, (0, 0, 255))  # Default Red if missing
-
-                # Draw ellipse around player
                 frame = self.draw_ellipse(frame, bbox, color, track_id)
+
                 # Draw ball possession indicator (triangle)
                 if player.get("has_ball", False):
-                    frame = self.draw_traingle(frame, bbox, (0, 255, 0))  # Yellow for ball possession
+                    frame = self.draw_triangle(frame, bbox, (0, 255, 0))  # Green for ball possession
                 
             for _, referee in referee_dict.items():
                 frame = self.draw_ellipse(frame, referee["bbox"], (0, 255, 255))
 
             for track_id, ball in ball_dict.items():
-                frame = self.draw_traingle(frame, ball["bbox"], (0, 255, 0))
+                frame = self.draw_triangle(frame, ball["bbox"], (0, 255, 0))
                 
             # ✅ Pass `team_colors` when calling `draw_team_ball_control()`
             frame = self.draw_team_ball_control(frame, frame_num, team_ball_control, self.team_colors)
-
             output_video_frames.append(frame)
 
         return output_video_frames
     
-    
-    def draw_traingle(self,frame,bbox,color):
-        y= int(bbox[1])
-        x,_ = get_center_of_bbox(bbox)
+    def draw_triangle(self, frame, bbox, color, confidence=None):
+        y = int(bbox[1])
+        x, _ = get_center_of_bbox(bbox)
 
         triangle_points = np.array([
-            [x,y],
-            [x-10,y-20],
-            [x+10,y-20],
+            [x, y],
+            [x - 10, y - 20],
+            [x + 10, y - 20],
         ])
-        cv2.drawContours(frame, [triangle_points],0,color, cv2.FILLED)
-        cv2.drawContours(frame, [triangle_points],0,(0,0,0), 2)
-        
+        cv2.drawContours(frame, [triangle_points], 0, color, cv2.FILLED)
+        cv2.drawContours(frame, [triangle_points], 0, (0, 0, 0), 2)
+
+        if confidence is not None:
+            cv2.putText(frame, f"{confidence:.2f}", (x - 15, y - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
         return frame
+
 
     def draw_ellipse(self, frame, bbox, color, track_id=None):
         y2 = int(bbox[3])

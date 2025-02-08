@@ -13,7 +13,7 @@ from speed_and_distance_estimator import SpeedAndDistance_Estimator
 
 def main():
     # Read Video
-    video_path = 'input_videos/eagle_4.mp4'
+    video_path = 'input_videos/eagle_8.mp4'
     video_frames = read_video(video_path)
 
     # Generate a unique stub path
